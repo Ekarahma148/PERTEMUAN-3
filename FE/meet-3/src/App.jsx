@@ -1,122 +1,273 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useState } from 'react';
+import axios from 'axios';
+import Cookies from 'js-cookie'; // Import js-cookie
 
-function App() {
-  const API = import.meta.env.VITE_API_BASE_URL;
-
+const App = () => {
   const [users, setUsers] = useState([]);
-  const [name, setName] = useState("");
-  const [gmail, setGmail] = useState("");
-  const [editId, setEditId] = useState(null);
+  const [gmail, setGmail] = useState('');
+  const [name, setname] = useState('');
+  const [password, setPassword] = useState('');
+  // const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [token, setToken] = useState(Cookies.get('token') || ''); // Ambil token dari cookie
+  const [profile, setProfile] = useState(null);
+  const [showRegister, setShowRegister] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
-  // ======================
-  // GET DATA
-  // ======================
-  const getUsers = async () => {
-    try {
-      const res = await axios.get(API);
-      setUsers(res.data);
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
+  // Fetch all users on mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    getUsers();
+    fetchUsers();
   }, []);
 
-  // ======================
-  // CREATE / UPDATE
-  // ======================
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Fetch all users
+  const fetchUsers = async () => {
     try {
-      if (editId) {
-        await axios.put(`${API}/${editId}`, { name, gmail });
-      } else {
-        await axios.post(API, { name, gmail });
-      }
-
-      setName("");
-      setGmail("");
-      setEditId(null);
-      getUsers();
-    } catch (err) {
-      console.log(err);
+      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/users`);
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      alert('Failed to fetch users.');
     }
   };
 
-  // ======================
-  // EDIT
-  // ======================
-  const handleEdit = (user) => {
-    setName(user.name);
-    setGmail(user.gmail);
-    setEditId(user.id);
+  // Register new user
+  const registerUser = async (e) => {
+    e.preventDefault();
+    if (!gmail || !name || !password) {
+      alert('All fields are required for registration.');
+      return;
+    }
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/register`,
+        // { gmail, name, password },
+        // {
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        // }
+        { gmail, name, password },
+        { withCredentials: true }
+      );
+      alert('Registration successful!');
+      setGmail('');
+      setShowRegister(false);
+    } catch (error) {
+      console.error('Error registering user:', error);
+      // alert('Registration failed.');
+      alert('Registration failed. Please try again.');
+    }
   };
 
-  // ======================
-  // DELETE
-  // ======================
-  const handleDelete = async (id) => {
+  // Login user
+  const loginUser = async (e) => {
+    e.preventDefault();
+    if (!name || !password) {
+      alert('Both name and password are required for login.');
+      return;
+    }
     try {
-      await axios.delete(`${API}/${id}`);
-      getUsers();
-    } catch (err) {
-      console.log(err);
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/login`,
+        // { name, password },
+        // {
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        // }
+        { name, password },
+        { withCredentials: true }
+      );
+      const userToken = response.data.token;
+      Cookies.set('token', userToken, { expires: 3 }); 
+      setToken(userToken);
+      // localStorage.setItem('token', userToken);
+      alert('Login successful!');
+      setShowLogin(false);
+      setShowRegister(false);
+    } catch (error) {
+      console.error('Error logging in:', error);
+      // alert('Login failed.');
+      alert('Login failed. Please check your credentials.');
+    }
+  };
+
+  // Logout user
+  // const logoutUser = () => {
+  //   setToken('');
+  //   localStorage.removeItem('token');
+  //   setProfile(null);
+  //   alert('Logged out successfully.');
+  const logoutUser = async () => {
+    try {
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/api/logout`, {}, {
+        headers: { Authorization: `Bearer ${token}` }, // Kirimkan token di header Authorization
+      });
+      Cookies.remove('token'); // Remove token from cookie
+      setToken('');
+      setProfile(null);
+      setShowRegister(false);
+      setShowLogin(false);
+      alert('Logged out successfully.');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      alert('Logout failed.');
+    }
+  };
+
+  // Fetch user profile
+  const fetchProfile = async () => {
+    try {
+      // const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
+      //   headers: { Authorization: `Bearer ${token}` },
+      // });
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_BASE_URL}/api/profile`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setProfile(response.data.user);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      alert('Failed to fetch profile. Please login first.');
     }
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>CRUD Users</h2>
+    <div className="min-h-screen bg-gradient-to-b from-blue-100 via-white to-blue-50 flex items-center justify-center">
+      <div className="w-full max-w-4xl bg-white shadow-lg rounded-lg p-6">
+        <h1 className="text-3xl font-extrabold text-center text-blue-600 mb-6">
+          User Management with Authentication
+        </h1>
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Gmail"
-          value={gmail}
-          onChange={(e) => setGmail(e.target.value)}
-        />
-        <button type="submit">
-          {editId ? "Update" : "Tambah"}
-        </button>
-      </form>
+        {/* Buttons to Show/Hide Forms */}
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => {
+              setShowRegister(!showRegister);
+              setShowLogin(false);
+            }}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-blue-500 transition-all"
+          >
+            {showRegister ? 'Close Register' : 'Register'}
+          </button>
+          <button
+            onClick={() =>{ setShowLogin(!showLogin); setShowRegister(false);}}
+            className="bg-green-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-green-500 transition-all"
+          >
+            {showLogin ? 'Close Login' : 'Login'}
+          </button>
+          {token && (
+            <button
+              onClick={logoutUser}
+              className="bg-red-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-red-500 transition-all"
+            >
+              Logout
+            </button>
+          )}
+        </div>
 
-      <table border="1" style={{ marginTop: 20 }}>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Gmail</th>
-            <th>Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <td>{user.id}</td>
-              <td>{user.name}</td>
-              <td>{user.gmail}</td>
-              <td>
-                <button onClick={() => handleEdit(user)}>Edit</button>
-                <button onClick={() => handleDelete(user.id)}>
-                  Hapus
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        {/* Register Form */}
+        {showRegister && (
+          // <form
+          //   onSubmit={registerUser}
+          //   className="flex flex-col items-center gap-4 mb-8"
+          // >
+          <form onSubmit={registerUser} className="flex flex-col items-center gap-4 mb-8">
+            <h2 className="text-xl font-bold text-blue-500">Register</h2>
+            <input
+              type="email"
+              placeholder="Enter Gmail"
+              value={gmail}
+              onChange={(e) => setGmail(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-300 outline-none"
+            />
+            <input
+              type="text"
+              placeholder="Enter name"
+              value={name}
+              onChange={(e) => setname(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-300 outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Enter Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-300 outline-none"
+            />
+            <button
+              type="submit"
+              className="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-blue-500 transition-all"
+            >
+              Register
+            </button>
+          </form>
+        )}
+
+        {/* Login Form */}
+        {showLogin && (
+          // <form
+          //   onSubmit={loginUser}
+          //   className="flex flex-col items-center gap-4 mb-8"
+          // >
+          <form onSubmit={loginUser} className="flex flex-col items-center gap-4 mb-8">
+            <h2 className="text-xl font-bold text-green-500">Login</h2>
+            <input
+              type="text"
+              placeholder="Enter name"
+              value={name}
+              onChange={(e) => setname(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-300 outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Enter Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-300 outline-none"
+            />
+            <button
+              type="submit"
+              className="w-full md:w-auto bg-green-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-green-500 transition-all"
+            >
+              Login
+            </button>
+          </form>
+        )}
+
+        {/* Fetch Profile */}
+        {token && !showRegister && !showLogin && (
+          <div className="text-center">
+            <button
+              onClick={fetchProfile}
+              className="bg-purple-600 text-white px-6 py-2 rounded-md shadow-md hover:bg-purple-500 transition-all"
+            >
+              Fetch Profile
+            </button>
+          </div>
+        )}
+
+        {/* Display Profile */}
+        {profile && (
+          <div className="mt-6 bg-gray-50 p-6 rounded-lg shadow-md w-80 mx-auto">
+            <h2 className="text-lg font-bold mb-2 text-purple-700">Profile Information</h2>
+            <p className="mb-2">
+              <span className="font-semibold">Gmail:</span> {profile.gmail}
+            </p>
+            <p className="mb-2">
+              <span className="font-semibold">name:</span> {profile.name}
+            </p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="mt-8 text-center text-gray-500 text-sm">
+          &copy; 2026 User Management with Authentication
+        </footer>
+      </div>
     </div>
   );
-}
+};
 
 export default App;
